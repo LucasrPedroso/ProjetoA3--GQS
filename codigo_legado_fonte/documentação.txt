@@ -1,0 +1,300 @@
+🧾 Relatório Técnico: Análise do Código Legado legacy_system.py
+📘 Objetivo do Código
+
+O arquivo legacy_system.py simula um sistema legado de usuários, pedidos e pagamentos, implementado de forma intencionalmente incorreta para demonstrar más práticas de programação orientada a objetos e violação de princípios de design.
+
+⚙️ Sumário dos Problemas Identificados
+Categoria	Problema	Consequência
+Arquitetura	Uso de variáveis globais (GLOBAL_CONFIG, DB, LOGGER)	Alto acoplamento, difícil manutenção
+Design Pattern	Singleton mal implementado	Instâncias múltiplas e imprevisíveis
+Boas práticas	Execução de código no import	Efeitos colaterais inesperados
+POO	Classes com múltiplas responsabilidades	Viola SRP (Single Responsibility Principle)
+Segurança	Uso de eval() e exec()	Possibilidade de execução de código arbitrário
+Tratamento de erros	except Exception: pass	Ocultação de falhas críticas
+Acoplamento	Dependência direta entre módulos	Dificulta testes unitários
+Estrutura de dados	Banco de dados em lista e arquivo JSON sem controle	Falta de integridade dos dados
+Herança	Hierarquia desnecessariamente profunda (User → Admin → SuperAdmin)	Viola LSP (Liskov Substitution Principle)
+Testabilidade	Código não modular e sem injeção de dependências	Dificuldade de teste isolado
+Naming	Nomes ambíguos (save, do_purchase, state)	Código confuso e pouco semântico
+🔍 Análise Detalhada por Seção
+1. 🔧 Configuração Global
+GLOBAL_CONFIG = {'db_path': '/tmp/fake_db.json', 'retry_count': 3, 'debug': True}
+
+
+Problemas:
+
+Uso de variável global mutável (violação do encapsulamento).
+
+Valor compartilhado por todo o sistema sem controle de acesso.
+
+Falta de validação de tipos e integridade.
+
+Correção:
+
+Criar uma classe Config imutável ou usar dataclass(frozen=True).
+
+Passar a configuração via injeção de dependência.
+
+2. 🧱 Classe Logger
+self.f = open('/tmp/legacy_log.txt', 'a')
+
+
+Problemas:
+
+Efeito colateral no construtor (abre arquivo ao instanciar).
+
+Ignora exceções críticas silenciosamente.
+
+Implementação de singleton incorreta (usa instância global, não controle interno).
+
+Falta de fechamento do arquivo (close() nunca é chamado).
+
+Correção:
+
+Implementar Singleton corretamente com @staticmethod ou @classmethod.
+
+Encapsular abertura/fechamento de arquivos com with.
+
+Substituir por módulo padrão logging do Python.
+
+3. 🗃️ Classe Database
+self._data = []
+
+
+Problemas:
+
+Persistência em lista na memória (não confiável).
+
+Escrita direta em JSON sem controle de concorrência.
+
+Falta de tratamento de erros específicos.
+
+Coupling com GLOBAL_CONFIG.
+
+Métodos save() e query_all() sem encapsulamento real.
+
+Correção:
+
+Implementar padrão Repository ou DAO.
+
+Criar camadas: DatabaseInterface, JSONDatabase.
+
+Adicionar locks ou controle transacional.
+
+Usar contextos (with open) e tratamento de erros específicos.
+
+4. 👤 Classe User
+
+Problemas:
+
+Responsabilidade múltipla (dados + persistência + envio de e-mail).
+
+Uso de eval() inseguro:
+
+template = "f'Hello {self.name}, {body} - {subject}'"
+msg = eval(template)
+
+
+Criação dinâmica de atributos (setattr) inesperada.
+
+Ausência de validação de tipos e e-mail.
+
+Correção:
+
+Separar em classes: User, UserRepository, EmailService.
+
+Remover eval() → usar f-string diretamente.
+
+Evitar setattr → criar atributo fixo session_token.
+
+5. 🧬 Classes Admin e SuperAdmin
+
+Problemas:
+
+Herança desnecessária e incorreta (Admin e SuperAdmin poderiam ser papéis, não subclasses).
+
+Viola o Princípio da Substituição de Liskov (SuperAdmin redefine comportamento destrutivo).
+
+Armazena segredos em texto puro (self.secret_key).
+
+Correção:
+
+Usar composição (papel Role associado a User).
+
+Proteger informações sensíveis.
+
+Implementar permissões via enum ou tabela de permissões.
+
+6. 📦 Classe Order
+
+Problemas:
+
+Método create_order() com múltiplas responsabilidades:
+
+Cria pedido
+
+Valida itens
+
+Aplica desconto
+
+Notifica usuário
+
+Persiste no banco
+
+Violação do Princípio da Responsabilidade Única (SRP).
+
+Lógica duplicada em calculate_total().
+
+Falta de validação de dados de entrada.
+
+Correção:
+
+Dividir em:
+
+OrderService (negócio)
+
+OrderRepository (persistência)
+
+NotificationService
+
+Centralizar lógica de cálculo e validação.
+
+7. 📣 Classe NotificationManager
+
+Problemas:
+
+if/elif gigante para cada tipo de evento (difícil de escalar).
+
+Acoplada diretamente a User e LOGGER.
+
+Falta de polimorfismo e extensibilidade.
+
+Correção:
+
+Usar Observer Pattern ou Strategy Pattern.
+
+Criar classes específicas de notificação:
+
+OrderCreatedNotification
+
+OrderFailedNotification
+
+8. 💳 Classe PaymentProcessor
+
+Problemas:
+
+Uso de eval() para processar métodos de pagamento.
+
+Aceita qualquer string como código Python.
+
+Tratamento de exceções genérico e silencioso.
+
+Falta de abstração (cada tipo de pagamento deveria ser uma classe separada).
+
+Correção:
+
+Usar Strategy Pattern:
+
+PaymentProcessor
+
+CardPayment
+
+PaypalPayment
+
+Remover completamente eval().
+
+Retornar objetos de erro claros e logar com logging.
+
+9. 🧰 Funções utilitárias (load_users, find_user_by_email)
+
+Problemas:
+
+Alto acoplamento com DB global.
+
+Pesquisa linear O(n).
+
+Falta de cache ou índice.
+
+Tratamento de erro genérico.
+
+Correção:
+
+Usar repositório (UserRepository).
+
+Implementar busca otimizada.
+
+Lançar exceções específicas (ex: UserNotFoundError).
+
+10. 🚨 Código executado no import
+print('legacy_system imported — initializing demo data')
+
+
+Problemas:
+
+Efeito colateral ao importar o módulo.
+
+Criação de objetos e escrita em disco sem controle.
+
+Viola o princípio de “importações puras”.
+
+Correção:
+
+Mover a inicialização para um if __name__ == '__main__':.
+
+Deixar o módulo importável sem executar nada automaticamente.
+
+11. 🧩 Função pública do_purchase()
+
+Problemas:
+
+Mistura diversas camadas (dados, lógica, notificação, pagamento).
+
+Cria usuários automaticamente sem validação.
+
+Falta de tipagem, logs e testes.
+
+Viola SRP, OCP e DIP.
+
+Correção:
+
+Reescrever como serviço:
+
+class PurchaseService:
+    def __init__(self, user_repo, order_repo, payment_service, notifier):
+        ...
+    def execute(self, email, items):
+        ...
+
+
+Aplicar injeção de dependência.
+
+🧠 Resumo dos Princípios Violados
+Princípio	Nome	Violação
+SRP	Single Responsibility	Classes com múltiplas funções
+OCP	Open/Closed	Código difícil de estender sem modificar
+LSP	Liskov Substitution	Subclasses com comportamento destrutivo
+ISP	Interface Segregation	Nenhuma interface clara
+DIP	Dependency Inversion	Uso de globais e instâncias fixas
+✅ Recomendações Gerais de Refatoração
+
+Substituir variáveis globais por injeção de dependência.
+
+Usar logging padrão do Python em vez de Logger caseiro.
+
+Dividir o sistema em módulos separados (user.py, order.py, payment.py, etc).
+
+Criar interfaces para persistência e serviços.
+
+Aplicar design patterns:
+
+Strategy (pagamento, notificações)
+
+Repository (persistência)
+
+Observer (eventos)
+
+Adicionar testes unitários para cada componente.
+
+Documentar as entidades e adicionar type hints.
+
+Isolar lógica de inicialização em main().
