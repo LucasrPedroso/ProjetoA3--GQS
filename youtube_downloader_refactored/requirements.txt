@@ -1,0 +1,7 @@
+PyQt5>=5.15.0
+yt-dlp>=2024.12.0
+requests>=2.28.0
+Pyrebase4>=4.5.0
+pytest>=7.4.0
+pytest-qt>=4.2.0
+pytest-mock>=3.11.0
